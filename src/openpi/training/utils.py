@@ -10,18 +10,19 @@ from openpi.models import model as _model
 from openpi.shared import array_typing as at
 
 
+"""
+训练状态
+
+参数:
+    params: nnx.State是​​模型的​​状态部分，包括所有可变数据
+    model_def: nnx.GraphDef描述了模型的结构，即模型长什么样、如何计算 
+
+用法说明:
+    nnx.merge(graphdef, state, ...)​​将 graphdef 和 state 重新合并，生成一个完整的、可运行的模型对象​​，可用于推理、训练等。
+"""
 @at.typecheck
 @struct.dataclass
 class TrainState:
-    """训练状态
-
-    参数:
-        params: nnx.State是​​模型的​​状态部分，包括所有可变数据
-        model_def: nnx.GraphDef描述了模型的结构，即模型长什么样、如何计算 
-
-    用法说明:
-        nnx.merge(graphdef, state, ...)​​将 graphdef 和 state 重新合并，生成一个完整的、可运行的模型对象​​，可用于推理、训练等。
-    """
     step: at.Int[at.ArrayLike, ""]
     params: nnx.State
     model_def: nnx.GraphDef[_model.BaseModel]
