@@ -14,6 +14,7 @@ class _MeshState:
     active_mesh: jax.sharding.Mesh | None = None
 
 
+# 创建设备网格(mesh)
 def make_mesh(num_fsdp_devices: int) -> jax.sharding.Mesh:
     if jax.device_count() % num_fsdp_devices != 0:
         raise ValueError(

@@ -360,7 +360,7 @@ class RLDSDroidDataConfig(DataConfigFactory):
     Config for training on DROID, using RLDS data format (for efficient training on larger datasets).
     """
 
-    rlds_data_dir: str | None = None
+    rlds_data_dir: str | None = None  # 需要修改
     action_space: droid_rlds_dataset.DroidActionSpace | None = None
 
     # Filtering options. Can pass a path to a dictionary that maps episodes to timestep ranges
@@ -432,6 +432,46 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
                         "observation/wrist_image_left": "wrist_image_left",
                         "observation/joint_position": "joint_position",
                         "observation/gripper_position": "gripper_position",
+                        "actions": "actions",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        )
+        # We assume joint *velocity* actions, so we should *not* apply an additional delta transform.
+        data_transforms = _transforms.Group(
+            inputs=[droid_policy.DroidInputs(model_type=model_config.model_type)],
+            outputs=[droid_policy.DroidOutputs()],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+    
+@dataclasses.dataclass(frozen=True)
+class LeRobotVelocityDataConfig(DataConfigFactory):
+    """
+    Example data config for custom DROID dataset in LeRobot format.
+    To convert your custom DROID dataset (<10s of hours) to LeRobot format, see examples/droid/convert_droid_data_to_lerobot.py
+    """
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/exterior_image_1_left": "exterior_image_1_left",
+                        "observation/exterior_image_2_left": "exterior_image_2_left",
+                        "observation/wrist_image_left": "wrist_image_left",
+                        "observation/joint_position": "joint_position",
+                        "observation/gripper_position": "gripper_position",
+                        "observation/velocity"
+                        "observation/enforce"
                         "actions": "actions",
                         "prompt": "prompt",
                     }
@@ -854,6 +894,40 @@ _CONFIGS = [
         # We use RLDS data loading to make training on this large dataset tractable.
         # For fine-tuning on your own DROID dataset, see below.
         name="pi05_full_droid_finetune",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=16,
+        ),
+        data=RLDSDroidDataConfig(
+            repo_id="droid",
+            # Set this to the path to your DROID RLDS dataset (the parent directory of the `droid` directory).
+            rlds_data_dir="/mnt/pi-data/kevin",
+            action_space=droid_rlds_dataset.DroidActionSpace.JOINT_POSITION,
+            assets=AssetsConfig(
+                assets_dir="gs://openpi-assets/checkpoints/pi05_base/assets/",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        num_train_steps=100_000,
+        batch_size=256,
+        log_interval=100,
+        save_interval=5000,
+        keep_period=10_000,
+        num_workers=0,  # Important: RLDS DataLoader requires num_workers=0, handles multi-processing internally
+    ),
+    TrainConfig(
+        # This config is for fine-tuning pi05 on the *full* DROID dataset.
+        # We use RLDS data loading to make training on this large dataset tractable.
+        # For fine-tuning on your own DROID dataset, see below.
+        name="pi05_full_droid_velocity_finetune",
         model=pi0_config.Pi0Config(
             pi05=True,
             action_dim=32,

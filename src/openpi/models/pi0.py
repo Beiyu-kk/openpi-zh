@@ -106,6 +106,9 @@ class Pi0(_model.BaseModel):
     def embed_prefix(
         self, obs: _model.Observation
     ) -> tuple[at.Float[at.Array, "b s emb"], at.Bool[at.Array, "b s"], at.Bool[at.Array, " s"]]:
+        """嵌入前缀信息
+        
+        """
         input_mask = []
         ar_mask = []
         tokens = []
@@ -145,6 +148,9 @@ class Pi0(_model.BaseModel):
         at.Bool[at.Array, " s"],
         at.Float[at.Array, "b emb"] | None,
     ]:
+        """嵌入后缀信息
+        
+        """
         input_mask = []
         ar_mask = []
         tokens = []
@@ -189,6 +195,22 @@ class Pi0(_model.BaseModel):
     def compute_loss(
         self, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions, *, train: bool = False
     ) -> at.Float[at.Array, "*b ah"]:
+        """计算损失函数
+
+        参数:
+            rng(at.KeyArrayLike): 随机数生成器的 Key​，用于控制模型中所有​​随机操作​​的可复现性，比如添加噪声、采样时间等。
+            observation: 当前环境的观测信息，包括语言指令、图像、关节角度，在这里增加末端速度!!!
+            actions: 真实采取的动作序列，
+            train: 控制​​预处理逻辑是否处于训练模式
+
+        返回:
+            at.Float[at.Array, "*b ah"]: 标量或者向量形式的损失值
+
+        实现细节:
+            1. 添加噪声到动作序列
+            2. 预测噪声
+            3. 计算MSE损失
+        """
         preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
         observation = _model.preprocess_observation(preprocess_rng, observation, train=train)
 
@@ -222,6 +244,8 @@ class Pi0(_model.BaseModel):
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
     ) -> _model.Actions:
+        """ 动作采样
+        """
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
