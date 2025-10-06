@@ -117,6 +117,9 @@ ignore = [
     "PD008",  # Lots of false positives.
     "ISC001", # Disabling to support ruff format.
     "LOG015", # Use logger.info.
+    "RUF001",
+    "RUF002",
+    "RUF003"
 ]
 unfixable = [
     "B905", # Fix defaults to strict=False, which is not what we want.
@@ -135,6 +138,3 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 markers = ["manual: should be run manually."]
 testpaths = ["src", "scripts", "packages"]
-
-[tool.ruff]
-ignore = ["RUF001","RUF002","RUF003"]
