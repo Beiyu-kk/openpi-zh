@@ -331,17 +331,8 @@ def main(config: _config.TrainConfig):
 
 if __name__ == "__main__":
     """Droid启动训练的指令
-    1.安装rlds
-        uv sync --group rlds
-    2.下载数据集
-        gsutil -m cp -r gs://gresearch/robotics/droid/1.0.1 <your_download_path>/droid/1.0.1
-    3.计算归一化的统计量​​
-        uv run --group rlds scripts/compute_norm_stats.py --config-name pi05_full_droid_finetune --max-frames 10_000_000 
-    开始前，我们需要修改 TrainConfig(see src/openpi/training/config.py) 中的 rlds_data_dir path，将其改为Droid数据集的实际下载路径
-    4.开始训练
-        XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run --group rlds scripts/train.py pi05_full_droid_finetune --exp-name=my_experiment --overwrite
-    其中，XLA_PYTHON_CLIENT_MEM_FRACTION=0.9是控制jax的显存的，pi05_full_droid_finetune是传递的参数
-    这意味着，config = TrainConfig(name="pi05_full_droid_finetune")
+        uv run --group rlds scripts/train.py pi05_full_droid_finetune --exp-name=my_experiment --overwrite
+        这意味着，config = TrainConfig(name="pi05_full_droid_finetune")
     """
     main(_config.cli())
 

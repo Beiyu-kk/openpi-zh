@@ -127,6 +127,7 @@ class FakeDataset(Dataset):
         return self._num_samples
 
 
+# 创建torch数据集
 def create_torch_dataset(
     data_config: _config.DataConfig, action_horizon: int, model_config: _model.BaseModelConfig
 ) -> Dataset:
@@ -151,6 +152,7 @@ def create_torch_dataset(
     return dataset
 
 
+# 创建rlds数据集
 def create_rlds_dataset(
     data_config: _config.DataConfig,
     action_horizon: int,
@@ -220,6 +222,7 @@ def transform_iterable_dataset(
     )
 
 
+# 创建数据加载器
 def create_data_loader(
     config: _config.TrainConfig,
     *,

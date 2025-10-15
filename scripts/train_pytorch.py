@@ -4,6 +4,7 @@ This script mirrors the behavior of the JAX trainer (`scripts/train.py`) but run
 entirely in PyTorch using the `PI0Pytorch` model and your existing config/data
 pipeline from `src/openpi/training/config.py` and `src/openpi/training/data_loader.py`.
 
+<config_name> 
 Usage
 Single GPU:
   python scripts/train_pytorch.py <config_name> --exp_name <run_name> --save_interval <interval>
@@ -47,6 +48,7 @@ import openpi.training.config as _config
 import openpi.training.data_loader as _data
 
 
+# 记录模型训练
 def init_logging():
     level_mapping = {"DEBUG": "D", "INFO": "I", "WARNING": "W", "ERROR": "E", "CRITICAL": "C"}
 
@@ -69,6 +71,7 @@ def init_logging():
         logger.handlers[0].setFormatter(formatter)
 
 
+# 可视化模型训练
 def init_wandb(config: _config.TrainConfig, *, resuming: bool, enabled: bool = True):
     """Initialize wandb logging."""
     if not enabled:
@@ -91,6 +94,8 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool, enabled: bool = T
         (ckpt_dir / "wandb_id.txt").write_text(wandb.run.id)
 
 
+# PyTorch 分布式训练环境中初始化和配置 Distributed Data Parallel (DDP) 机制
+# Distributed Data Parallel分布式数据并行
 def setup_ddp():
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     use_ddp = world_size > 1
@@ -115,6 +120,7 @@ def cleanup_ddp():
         torch.distributed.destroy_process_group()
 
 
+# 设置随机种子
 def set_seed(seed: int, local_rank: int):
     torch.manual_seed(seed + local_rank)
     np.random.seed(seed + local_rank)
@@ -122,6 +128,8 @@ def set_seed(seed: int, local_rank: int):
         torch.cuda.manual_seed_all(seed + local_rank)
 
 
+# 构建数据集，使用了openpi.training中的data_loader
+# import openpi.training.data_loader as _data
 def build_datasets(config: _config.TrainConfig):
     # Use the unified data loader with PyTorch framework
     data_loader = _data.create_data_loader(config, framework="pytorch", shuffle=True)
@@ -146,6 +154,7 @@ def get_model_parameters(model):
     )
 
 
+# 保存模型检查点
 def save_checkpoint(model, optimizer, global_step, config, is_main, data_config):
     """Save a checkpoint with model state, optimizer state, and metadata."""
     if not is_main:
@@ -194,6 +203,7 @@ def save_checkpoint(model, optimizer, global_step, config, is_main, data_config)
             wandb.log({"checkpoint_step": global_step}, step=global_step)
 
 
+# 加载模型检查点
 def load_checkpoint(model, optimizer, checkpoint_dir, device):
     """Load the latest checkpoint and return the global step."""
     checkpoint_steps = [
@@ -271,6 +281,7 @@ def load_checkpoint(model, optimizer, checkpoint_dir, device):
         raise
 
 
+# 获取最新的检查点训练步数
 def get_latest_checkpoint_step(checkpoint_dir):
     """Get the latest checkpoint step number from a checkpoint directory."""
     checkpoint_steps = [
@@ -306,7 +317,9 @@ def log_memory_usage(device, step, phase="unknown"):
     )
 
 
+# 主函数
 def train_loop(config: _config.TrainConfig):
+    """ 训练初始化 """
     use_ddp, local_rank, device = setup_ddp()
     is_main = (not use_ddp) or (dist.get_rank() == 0)
     set_seed(config.seed, local_rank)
@@ -346,6 +359,7 @@ def train_loop(config: _config.TrainConfig):
     if is_main:
         init_wandb(config, resuming=resuming, enabled=config.wandb_enabled)
 
+    """ 加载数据(改) """
     # Build data loader using the unified data loader
     # Calculate effective batch size per GPU for DDP
     # For N GPUs, each GPU should get batch_size/N samples, so total across all GPUs is batch_size
@@ -389,6 +403,7 @@ def train_loop(config: _config.TrainConfig):
             torch.cuda.empty_cache()
         logging.info("Cleared sample batch and data loader from memory")
 
+    """ 构建模型 """
     # Build model
     if not isinstance(config.model, openpi.models.pi0_config.Pi0Config):
         # Convert dataclass to Pi0Config if needed
@@ -406,6 +421,7 @@ def train_loop(config: _config.TrainConfig):
         # Update dtype to match pytorch_training_precision
         object.__setattr__(model_cfg, "dtype", config.pytorch_training_precision)
 
+    # to是nn.modules的用法，用于将模型送到指定设备
     model = openpi.models_pytorch.pi0_pytorch.PI0Pytorch(model_cfg).to(device)
 
     if hasattr(model, "gradient_checkpointing_enable"):

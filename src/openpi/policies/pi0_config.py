@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from openpi.models.pi0 import Pi0
 
 
+# 在scripts的train_pytorch.py中调用了这个类
 @dataclasses.dataclass(frozen=True)
 class Pi0Config(_model.BaseModelConfig):
     dtype: str = "bfloat16"
@@ -22,12 +23,16 @@ class Pi0Config(_model.BaseModelConfig):
     action_expert_variant: _gemma.Variant = "gemma_300m"
 
     # Set the model specific defaults.
+    # action_dim 动作维度，action_horizon 一个动作块包含的动作数量
+    # velocity_dim
     action_dim: int = 32
     action_horizon: int = 50
     max_token_len: int = None  # type: ignore
     # Pi05 has two differences from Pi0:
     # - the state input is part of the discrete language tokens rather than a continuous input that is part of the suffix
     # - the action expert uses adaRMSNorm to inject the flow matching timestep
+    # 状态输入是离散语言令牌的一部分，而不是后缀中连续输入的一部分
+    # 动作专家使用 adaRMSNorm 来注入流匹配时间步
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore

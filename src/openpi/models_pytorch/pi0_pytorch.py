@@ -69,11 +69,29 @@ def make_att_2d_masks(pad_masks, att_masks):
       input_mask: bool[B, N] true if its part of the input, false if padding.
       mask_ar: int32[B, N] mask that's 1 where previous tokens cannot depend on
         it and 0 where it shares the same attention mask as the previous token.
+
+    这个函数 make_att_2d_masks(pad_masks, att_masks) 来自 Big Vision 项目，
+    用于生成 Transformer 模型中的 2D 注意力掩码（attention mask）。它支持多种注意力机制，
+    例如纯因果注意力（causal attention）、前缀语言模型注意力（prefix-LM attention），
+    以及块状因果注意力（block-wise causal attention）。
+    核心思想是通过 att_masks 定义序列中的“块”（block），确保每个 token 只能关注同一块或更早块中的有效 token，
+    同时处理填充（padding）。
+
+    输入：
+    pad_masks: bool[B, N] 张量，B 是批次大小（batch size），N 是序列长度（sequence length）。
+    True 表示该位置是有效输入 token，False 表示填充（padding）。
+    att_masks: int[B, N] 张量，用于定义注意力块。值为 1 表示该 token 是新块的起始（前面的 token 不能关注它），
+    值为 0 表示它与前一个 token 共享相同的注意力范围。
+
+    输出：bool[B, N, N] 张量，表示 2D 注意力掩码。mask[i, j] = True 表示第 i 个 token 可以关注第 j 个 token。
+    函数会先检查输入维度是否为 2（否则抛出 ValueError）。
     """
+    # 函数会先检查输入维度是否为 2（否则抛出 ValueError）。
     if att_masks.ndim != 2:
         raise ValueError(att_masks.ndim)
     if pad_masks.ndim != 2:
         raise ValueError(pad_masks.ndim)
+
 
     cumsum = torch.cumsum(att_masks, dim=1)
     att_2d_masks = cumsum[:, None, :] <= cumsum[:, :, None]
@@ -81,15 +99,18 @@ def make_att_2d_masks(pad_masks, att_masks):
     return att_2d_masks & pad_2d_masks
 
 
+# 在scripts的train_pytorch.py中调用了这个类
 class PI0Pytorch(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.pi05 = config.pi05
 
+        # 分别给定VLM设置和动作专家模块设置
         paligemma_config = _gemma.get_config(config.paligemma_variant)
         action_expert_config = _gemma.get_config(config.action_expert_variant)
 
+        # PaliGemmaWithExpertModel来自gemma_pytorch.py
         self.paligemma_with_expert = PaliGemmaWithExpertModel(
             paligemma_config,
             action_expert_config,
@@ -97,9 +118,11 @@ class PI0Pytorch(nn.Module):
             precision=config.dtype,
         )
 
+        # 给定action投影的输入输出维度
         self.action_in_proj = nn.Linear(32, action_expert_config.width)
         self.action_out_proj = nn.Linear(action_expert_config.width, 32)
 
+        # 如果是pi0.5则没有state_proj
         if self.pi05:
             self.time_mlp_in = nn.Linear(action_expert_config.width, action_expert_config.width)
             self.time_mlp_out = nn.Linear(action_expert_config.width, action_expert_config.width)
@@ -108,6 +131,8 @@ class PI0Pytorch(nn.Module):
             self.action_time_mlp_in = nn.Linear(2 * action_expert_config.width, action_expert_config.width)
             self.action_time_mlp_out = nn.Linear(action_expert_config.width, action_expert_config.width)
 
+        # torch.compile 是 PyTorch 2.0 引入的一个函数，用于对给定的函数或方法进行编译优化，从而提升其执行性能
+        # 在下方定义了这个函数，用于对动作进行采样
         torch.set_float32_matmul_precision("high")
         self.sample_actions = torch.compile(self.sample_actions, mode="max-autotune")
 
@@ -124,7 +149,10 @@ class PI0Pytorch(nn.Module):
             raise ValueError(msg) from None
 
     def gradient_checkpointing_enable(self):
-        """Enable gradient checkpointing for memory optimization."""
+        """
+            Enable gradient checkpointing for memory optimization. 
+            为内存优化启用梯度检查点
+        """
         self.gradient_checkpointing_enabled = True
         self.paligemma_with_expert.paligemma.language_model.gradient_checkpointing = True
         self.paligemma_with_expert.paligemma.vision_tower.gradient_checkpointing = True
@@ -133,7 +161,10 @@ class PI0Pytorch(nn.Module):
         logging.info("Enabled gradient checkpointing for PI0Pytorch model")
 
     def gradient_checkpointing_disable(self):
-        """Disable gradient checkpointing."""
+        """
+            Disable gradient checkpointing.
+            禁用梯度检查点
+        """
         self.gradient_checkpointing_enabled = False
         self.paligemma_with_expert.paligemma.language_model.gradient_checkpointing = False
         self.paligemma_with_expert.paligemma.vision_tower.gradient_checkpointing = False
@@ -142,7 +173,10 @@ class PI0Pytorch(nn.Module):
         logging.info("Disabled gradient checkpointing for PI0Pytorch model")
 
     def is_gradient_checkpointing_enabled(self):
-        """Check if gradient checkpointing is enabled."""
+        """
+            Check if gradient checkpointing is enabled.
+            查看是否打开
+        """
         return self.gradient_checkpointing_enabled
 
     def _apply_checkpoint(self, func, *args, **kwargs):
@@ -169,6 +203,7 @@ class PI0Pytorch(nn.Module):
             observation.state,
         )
 
+    # 随机噪声
     def sample_noise(self, shape, device):
         return torch.normal(
             mean=0.0,
@@ -178,21 +213,25 @@ class PI0Pytorch(nn.Module):
             device=device,
         )
 
+    # 采样流匹配步数
     def sample_time(self, bsize, device):
         time_beta = sample_beta(1.5, 1.0, bsize, device)
         time = time_beta * 0.999 + 0.001
         return time.to(dtype=torch.float32, device=device)
 
+    # 前缀嵌入，包括图片和文字
     def embed_prefix(
         self, images, img_masks, lang_tokens, lang_masks
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Embed images with SigLIP and language tokens with embedding layer to prepare
         for PaliGemma transformer processing.
         """
+        # 嵌入向量，填充掩码，注意力掩码
         embs = []
         pad_masks = []
         att_masks = []
 
+        # 处理图片
         # Process images
         for img, img_mask in zip(images, img_masks, strict=True):
 
@@ -208,7 +247,7 @@ class PI0Pytorch(nn.Module):
 
             # Create attention masks so that image tokens attend to each other
             att_masks += [0] * num_img_embs
-
+        
         # Process language tokens
         def lang_embed_func(lang_tokens):
             lang_emb = self.paligemma_with_expert.embed_language_tokens(lang_tokens)
@@ -234,6 +273,7 @@ class PI0Pytorch(nn.Module):
 
         return embs, pad_masks, att_masks
 
+    # 后缀嵌入，包括机器人状态和噪声动作
     def embed_suffix(self, state, noisy_actions, timestep):
         """Embed state, noisy_actions, timestep to prepare for Expert Gemma processing."""
         embs = []
@@ -313,6 +353,7 @@ class PI0Pytorch(nn.Module):
 
         return embs, pad_masks, att_masks, adarms_cond
 
+    # 前向传播
     def forward(self, observation, actions, noise=None, time=None) -> Tensor:
         """Do a full training forward pass and compute the loss (batch_size x num_steps x num_motors)"""
         images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=True)
@@ -372,6 +413,8 @@ class PI0Pytorch(nn.Module):
 
         return F.mse_loss(u_t, v_t, reduction="none")
 
+
+    # 对动作进行采样
     @torch.no_grad()
     def sample_actions(self, device, observation, noise=None, num_steps=10) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
@@ -418,6 +461,7 @@ class PI0Pytorch(nn.Module):
             time += dt
         return x_t
 
+    # 去噪函数
     def denoise_step(
         self,
         state,
